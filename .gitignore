@@ -16,9 +16,8 @@
 # test coverage
 /coverage
 
-# claude / ai config (personal + heavy)
-.claude/settings.local.json
-.claude/mcp/node_modules/
+# claude / ai config (untracked)
+.claude/
 
 # misc
 .DS_Store
