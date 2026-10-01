@@ -1,0 +1,20 @@
+# dependencies
+/node_modules
+
+# build
+/dist
+*.tsbuildinfo
+
+# env
+.env
+.env*.local
+
+# vercel / turbo
+.vercel
+.turbo
+
+# test coverage
+/coverage
+
+# misc
+.DS_Store
