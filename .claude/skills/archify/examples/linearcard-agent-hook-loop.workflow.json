@@ -1,0 +1,98 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Claude Code Agent Tool-Call Loop (LinearCard)",
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "happy-path",
+        "label": "Prompt to reply",
+        "focus": ["user", "rules", "planner", "secrets", "toolrun", "log", "reply"],
+        "note": "Follow a prompt through rules-context, the PreToolUse gate, execution, and logging."
+      },
+      {
+        "id": "blocked-path",
+        "label": "Gate blocks a call",
+        "focus": ["secrets", "feedback"],
+        "note": "pre_tool_use_secrets.py and pre_tool_use_dependencies.py exit 2, stderr returns as agent context."
+      },
+      {
+        "id": "stop-retry",
+        "label": "Stop-hook test loop",
+        "focus": ["stophook", "teststop", "loopguard", "reply"],
+        "note": "stop_tests_must_pass.py blocks turn-end on red, guarded by stop_hook_active."
+      }
+    ],
+    "output": "examples/linearcard-agent-hook-loop-rendered.html"
+  },
+  "lanes": [
+    { "id": "surface", "label": "User Surface" },
+    { "id": "agent", "label": "Agent Runtime" },
+    { "id": "policy", "label": "Policy Boundary & Exception Handling", "variant": "exception" },
+    { "id": "tools", "label": "Tool Execution & Observability" }
+  ],
+  "phases": [
+    { "id": "intake", "label": "Prompt + plan", "fromCol": 0, "toCol": 1 },
+    { "id": "gate", "label": "Policy check", "fromCol": 2, "toCol": 2, "variant": "security" },
+    { "id": "run", "label": "Execute + observe", "fromCol": 3, "toCol": 5, "variant": "dashed" }
+  ],
+  "groups": [
+    { "id": "block_handling", "label": "Blocked call handling", "lane": "policy", "fromCol": 2, "toCol": 3, "variant": "security" },
+    { "id": "stop_loop", "label": "Stop-hook retry loop", "lane": "policy", "fromCol": 4, "toCol": 5, "variant": "dashed" }
+  ],
+  "mainPath": ["user", "rules", "planner", "secrets", "toolrun", "posthook", "log"],
+  "nodes": [
+    { "id": "user", "lane": "surface", "col": 0, "type": "external", "label": "User", "sublabel": "submits prompt", "width": 132 },
+    { "id": "rules", "lane": "surface", "col": 1, "type": "frontend", "label": "rules-context.js", "sublabel": "UserPromptSubmit", "width": 150 },
+    { "id": "reply", "lane": "surface", "col": 5, "type": "backend", "label": "Turn Reply", "sublabel": "or turn ends", "width": 132 },
+
+    { "id": "planner", "lane": "agent", "col": 1, "type": "backend", "label": "Agent Loop", "sublabel": "plans next tool call", "width": 150 },
+    { "id": "stophook", "lane": "agent", "col": 4, "type": "backend", "label": "Stop Attempt", "sublabel": "agent tries to finish", "width": 150 },
+
+    { "id": "secrets", "lane": "policy", "col": 2, "type": "security", "label": "PreToolUse Hooks", "sublabel": "secrets.py + dependencies.py", "tag": "exit 0 = allow", "width": 200 },
+    { "id": "feedback", "lane": "policy", "col": 3, "type": "messagebus", "label": "stderr -> Agent", "sublabel": "block reason as context", "width": 160 },
+    { "id": "teststop", "lane": "policy", "col": 4, "type": "security", "label": "stop_tests_must_pass.py", "sublabel": "runs suite, blocks on red", "width": 200 },
+    { "id": "loopguard", "lane": "policy", "col": 5, "type": "messagebus", "label": "stop_hook_active guard", "sublabel": "caps spin at 8 blocks", "width": 190 },
+
+    { "id": "toolrun", "lane": "tools", "col": 3, "type": "backend", "label": "Tool Executes", "sublabel": "Read / Edit / Bash / ...", "width": 150 },
+    { "id": "posthook", "lane": "tools", "col": 4, "type": "messagebus", "label": "PostToolUse", "sublabel": "cannot block, fires always", "width": 150 },
+    { "id": "log", "lane": "tools", "col": 5, "type": "database", "label": "agent-actions.jsonl", "sublabel": "locked append, fail-open", "width": 160 }
+  ],
+  "edges": [
+    { "id": "prompt-rules", "from": "user", "to": "rules", "variant": "default" },
+    { "id": "rules-inject", "from": "rules", "to": "planner", "label": "inject rule pointers", "variant": "default" },
+    { "id": "plan-secrets", "from": "planner", "to": "secrets", "label": "attempt tool call", "variant": "emphasis" },
+    { "id": "secrets-allow", "from": "secrets", "to": "toolrun", "label": "exit 0", "variant": "emphasis" },
+    { "id": "secrets-block", "from": "secrets", "to": "feedback", "label": "exit 2", "variant": "security", "role": "error" },
+    { "id": "feedback-replan", "from": "feedback", "to": "planner", "label": "agent adapts, retries", "variant": "dashed", "role": "branch" },
+
+    { "id": "toolrun-post", "from": "toolrun", "to": "posthook", "variant": "default" },
+    { "id": "post-log", "from": "posthook", "to": "log", "label": "append JSONL", "variant": "dashed" },
+
+    { "id": "planner-stop", "from": "planner", "to": "stophook", "label": "turn ends", "variant": "default" },
+    { "id": "stop-test", "from": "stophook", "to": "teststop", "variant": "emphasis" },
+    { "id": "test-green", "from": "teststop", "to": "reply", "label": "exit 0, green", "variant": "emphasis" },
+    { "id": "test-red", "from": "teststop", "to": "loopguard", "label": "exit 2, red -> agent fixes, retries stop", "variant": "security", "role": "error" }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Fail-Open Design",
+      "items": [
+        "Every hook here defaults to exit 0 on any internal error",
+        "Only secrets/rm-rf, unread dependencies, and failing tests can block"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "No Human Approval Gate",
+      "items": [
+        "The Policy Boundary is fully programmatic: no consent step exists in this repo",
+        "PostToolUse cannot block; it only observes after the tool already ran"
+      ]
+    }
+  ]
+}

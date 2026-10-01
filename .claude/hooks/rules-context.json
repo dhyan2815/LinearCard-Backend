@@ -1,0 +1,39 @@
+{
+  "backend.md": {
+    "description": "NestJS module map, tenant-scoping pattern, Google Wallet, pass issuance, outbound webhooks, security, test commands.",
+    "keywords": [
+      "nestjs", "backend", "controller", "\\bmodule\\b", "supabase", "tenant",
+      "api route", "\\bendpoint\\b", "tenantguard", "\\bguard\\b", "\\bservice\\b",
+      "webhook", "wallet", "pass issuance", "otp", "api key"
+    ]
+  },
+  "env-variables.md": {
+    "description": "Exhaustive env var reference: required vs optional, load order, Google Wallet credential resolution, RLS read path, local dev example.",
+    "keywords": [
+      "env var", "environment variable", "\\.env\\b", "api[_ ]key", "issuer_id",
+      "google_private_key", "wallet_credentials_key", "jwt_secret",
+      "next_public_", "supabase_service_role_key", "\\.env\\.example"
+    ]
+  },
+  "naming_conventions.md": {
+    "description": "Naming conventions across files, classes, functions, variables, DB schema, API endpoints, tests.",
+    "keywords": [
+      "naming convention", "variable name", "\\brename\\b", "camelcase",
+      "snake_case", "pascalcase", "\\bnaming\\b"
+    ]
+  },
+  "coding_standards.md": {
+    "description": "Language-agnostic style guide: formatting, error handling, testing conventions, anti-patterns, review checklist.",
+    "keywords": [
+      "coding standard", "style guide", "\\blint\\b", "code style",
+      "formatting rule", "anti-pattern"
+    ]
+  },
+  "git.md": {
+    "description": "No co-authorship/attribution lines in commit messages or PR descriptions, ever.",
+    "keywords": [
+      "commit message", "pull request", "\\bpr\\b description", "co-authored",
+      "attribution"
+    ]
+  }
+}

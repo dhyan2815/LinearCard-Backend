@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": ["@playwright/mcp"]
+    },
+    "supabase-inspector": {
+      "command": "node",
+      "args": [".claude/mcp/supabase-inspector.mjs"]
+    },
+    "architecture-navigator": {
+      "command": "node",
+      "args": [".claude/mcp/architecture-navigator.mjs"]
+    },
+    "tenant-auditor": {
+      "command": "node",
+      "args": [".claude/mcp/tenant-auditor.mjs"]
+    }
+  }
+}

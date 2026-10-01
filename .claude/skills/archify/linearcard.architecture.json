@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "LinearCard Architecture",
+    "output": "linearcard-architecture.html",
+    "quality_profile": "showcase",
+    "views": [
+      { "id": "enrollment-path", "label": "Enrollment & pass issuance", "focus": ["member", "web", "api", "issuance", "db", "wallet"], "note": "Consumer enrolls, backend issues a pass, Google Wallet is pushed." },
+      { "id": "admin-side", "label": "Admin dashboard", "focus": ["admin", "web", "api", "db"], "note": "Tenant admin manages programs, members, and campaigns." },
+      { "id": "notifications", "label": "Notification fan-out", "focus": ["api", "whatsapp", "webhooks", "db"], "note": "Best-effort side effects after DB writes." }
+    ]
+  },
+  "components": [
+    { "id": "member", "type": "external", "label": "Member", "sublabel": "consumer / scan", "pos": [30, 280], "size": [120, 60] },
+    { "id": "admin", "type": "external", "label": "Tenant Admin", "sublabel": "dashboard user", "pos": [30, 60], "size": [120, 60] },
+    { "id": "psp", "type": "external", "label": "Payment PSP", "sublabel": "external gateway", "pos": [30, 500], "size": [120, 60] },
+    { "id": "web", "type": "frontend", "label": "Next.js Web", "sublabel": "apps/web :3000", "pos": [240, 220], "size": [140, 64] },
+    { "id": "auth", "type": "security", "label": "TenantGuard + OTP", "sublabel": "auth module", "pos": [470, 60], "size": [150, 60], "tag": "req.tenantId" },
+    { "id": "api", "type": "backend", "label": "NestJS API", "sublabel": "apps/api :3001", "pos": [470, 220], "size": [150, 64] },
+    { "id": "payments", "type": "backend", "label": "Payments Webhook", "sublabel": "HMAC verified", "pos": [470, 500], "size": [150, 60] },
+    { "id": "issuance", "type": "backend", "label": "PassIssuanceService", "sublabel": "issueForMember()", "pos": [720, 60], "size": [160, 60] },
+    { "id": "db", "type": "database", "label": "Supabase Postgres", "sublabel": "service-role, tenantId filtered", "pos": [720, 340], "size": [160, 64] },
+    { "id": "wallet", "type": "external", "label": "Google Wallet", "sublabel": "GenericClass/Object", "pos": [990, 60], "size": [150, 60] },
+    { "id": "whatsapp", "type": "external", "label": "WAHA WhatsApp", "sublabel": "notification.provider", "pos": [990, 220], "size": [150, 60] },
+    { "id": "webhooks", "type": "messagebus", "label": "Outbound Webhooks", "sublabel": "developers module", "pos": [990, 400], "size": [150, 60] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "LinearCard Monorepo", "wraps": ["web", "auth", "api", "payments", "issuance", "db"] },
+    { "kind": "security-group", "label": "Tenant-scoped (TenantGuard)", "wraps": ["auth", "api", "issuance"] }
+  ],
+  "connections": [
+    { "id": "member-to-web", "from": "member", "to": "web", "label": "enroll / scan", "variant": "emphasis" },
+    { "id": "admin-to-web", "from": "admin", "to": "web", "label": "manage programs" },
+    { "id": "web-to-auth", "from": "web", "to": "auth", "label": "OTP / session", "variant": "security" },
+    { "id": "web-to-api", "from": "web", "to": "api", "label": "/api/* proxy", "labelDy": 16 },
+    { "id": "auth-to-api", "from": "auth", "to": "api", "label": "req.tenantId", "labelAt": [545, 134] },
+    { "id": "api-to-issuance", "from": "api", "to": "issuance", "label": "issue pass" },
+    { "id": "issuance-to-wallet", "from": "issuance", "to": "wallet", "label": "save link (RS256)", "variant": "dashed" },
+    { "id": "api-to-db", "from": "api", "to": "db", "label": "SQL (tenantId filtered)" },
+    { "id": "api-to-whatsapp", "from": "api", "to": "whatsapp", "label": "template send", "variant": "dashed" },
+    { "id": "api-to-webhooks", "from": "api", "to": "webhooks", "label": "dispatch (fire-and-forget)", "variant": "dashed" },
+    { "id": "psp-to-payments", "from": "psp", "to": "payments", "label": "webhook", "variant": "security" },
+    { "id": "payments-to-db", "from": "payments", "to": "db", "label": "record order" }
+  ],
+  "cards": [
+    { "dot": "rose", "title": "Trust boundary", "items": ["Every guarded route reads req.tenantId from TenantGuard, never from body/query", "Service-role Supabase client bypasses RLS — every query must filter tenantId explicitly"] },
+    { "dot": "emerald", "title": "Primary path", "items": ["Member enrolls via web → API → PassIssuanceService → Wallet push", "Wallet/WhatsApp/webhook effects are best-effort, logged on failure, never roll back the DB"] },
+    { "dot": "cyan", "title": "External dependencies", "items": ["Google Wallet (RS256-signed save links, per-tenant credentials)", "WAHA (self-hosted WhatsApp gateway)", "Payment PSP (HMAC-verified webhook)", "Supabase (Postgres, shared project across environments)"] }
+  ]
+}
