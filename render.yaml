@@ -7,16 +7,20 @@ services:
     buildCommand: npm install && npm run build
     startCommand: npm run start:prod
     healthCheckPath: /health
-    envVars: &envVars
+    envVars:
       - key: NODE_VERSION
         value: "20"
+      - key: WALLET_ENV_PREFIX
+        value: none
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
       - key: JWT_SECRET
         sync: false
       - key: WALLET_CREDENTIALS_KEY
         sync: false
-      - key: NEXT_PUBLIC_SUPABASE_URL
-        sync: false
-      - key: SUPABASE_SERVICE_ROLE_KEY
+      - key: WALLET_WEBHOOK_SECRET
         sync: false
       - key: ISSUER_ID
         sync: false
@@ -36,10 +40,6 @@ services:
         sync: false
       - key: NEXT_PUBLIC_API_URL
         sync: false
-      - key: WALLET_WEBHOOK_SECRET
-        sync: false
-      - key: WALLET_ENV_PREFIX
-        sync: false # "none" on prod, "dev" on staging
 
   - type: web
     name: linearcard-api-dev
@@ -49,4 +49,36 @@ services:
     buildCommand: npm install && npm run build
     startCommand: npm run start:prod
     healthCheckPath: /health
-    envVars: *envVars
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: WALLET_ENV_PREFIX
+        value: dev
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: WALLET_CREDENTIALS_KEY
+        sync: false
+      - key: WALLET_WEBHOOK_SECRET
+        sync: false
+      - key: ISSUER_ID
+        sync: false
+      - key: GOOGLE_CLIENT_EMAIL
+        sync: false
+      - key: GOOGLE_PRIVATE_KEY
+        sync: false
+      - key: WAHA_BASE_URL
+        sync: false
+      - key: WAHA_API_KEY
+        sync: false
+      - key: WAHA_SESSION
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: NEXT_PUBLIC_BASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_API_URL
+        sync: false
