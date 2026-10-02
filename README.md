@@ -1,326 +1,341 @@
 # LinearCard
 
-![Turborepo](https://img.shields.io/badge/Turborepo-Monorepo-EF4444?style=flat-square&logo=turborepo)
 ![Next.js](https://img.shields.io/badge/Next.js-16%20(App%20Router)-black?style=flat-square&logo=next.js)
 ![NestJS](https://img.shields.io/badge/NestJS-10-E0234E?style=flat-square&logo=nestjs)
 ![React](https://img.shields.io/badge/React-19-blue?style=flat-square&logo=react)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind-v4-06B6D4?style=flat-square&logo=tailwind-css)
 ![Supabase](https://img.shields.io/badge/Supabase-Database-3ECF8E?style=flat-square&logo=supabase)
-![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178C6?style=flat-square&logo=typescript)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?style=flat-square&logo=typescript)
 ![Google Wallet](https://img.shields.io/badge/Google%20Wallet-API%20REST%20%2B%20JWT-4285F4?style=flat-square&logo=google)
 
-**LinearCard** is an enterprise-grade, multi-tenant digital pass & loyalty platform for **Google Wallet** (with Apple and Samsung Wallet planned). It pairs a Linear-inspired dark-mode admin dashboard and real-time 3D pass rendering with an advanced program-scoped loyalty engine, POS scanner, developer platform, and multi-channel engagement via WhatsApp (WAHA) and Google Wallet push notifications.
+**LinearCard** is a multi-tenant digital pass & loyalty platform for **Google Wallet**. It pairs a Linear-inspired admin dashboard with a program-scoped loyalty engine, a staff POS scanner, a developer platform, and customer engagement via WhatsApp (WAHA) and Google Wallet messages.
 
-In LinearCard, a tenant runs multiple **programs** (loyalty clubs, gym memberships, event tickets, travel passes, digital business cards, coupons, gift cards, and stamp cards) instantiated from presets. Each program owns its pass templates, tier thresholds, store locations, WhatsApp messaging templates, and consumer enrollment slug - organizing the entire brand dashboard into program-scoped operational workspaces.
+A tenant runs multiple **programs** — loyalty clubs, gym memberships, event and travel tickets, business cards, gift cards, coupons, stamp cards, access passes and student IDs — each created from a preset. Every program owns its pass template, tiers, store locations, WhatsApp templates and enrollment link, and gets its own workspace in the dashboard.
+
+> This README is shared by both repositories:
+> - **[LinearCard-Frontend](https://github.com/dhyan2815/LinearCard-Frontend)** — Next.js 16 dashboard, scanner and enrollment app (Vercel)
+> - **[LinearCard-Backend](https://github.com/dhyan2815/LinearCard-Backend)** — NestJS 10 API, Supabase migrations and scripts (Render)
+
+---
+
+## Architecture
+
+```
+ Browser (admin / staff / customer)
+        │
+        ▼
+ LinearCard-Frontend  (Next.js 16, Vercel, :3000)
+   └── /api/*  ──rewrite proxy──►  LinearCard-Backend  (NestJS 10, Render, :3001)
+                                        ├── Supabase Postgres (service-role client, explicit tenantId filters)
+                                        ├── Google Wallet REST API (classes, objects, messages, save-link JWTs)
+                                        ├── WAHA (WhatsApp OTP, pass links, receipts, campaigns)
+                                        └── Outbound webhooks to tenant endpoints
+ Google Wallet ──signed callback──► /passes/webhooks/google-wallet
+ PSP / POS     ──HMAC webhook────► /webhooks/payment/:tenantId, /passes/webhooks/external-order
+```
+
+- The browser only ever calls its own origin (`/api/*`). `next.config.mjs` proxies those calls to the backend, so there is no CORS and the `admin_session` cookie stays same-origin.
+- All business logic, database access and third-party calls live in the backend. Side effects (Wallet push, WhatsApp, webhooks) run after the database write and never roll it back.
+- Everything runs in-request — there is no job queue. Campaigns send in chunks of 25.
 
 ---
 
 ## Features & Capabilities
 
 ### Google Wallet Integration
-- **Cryptographic JWT Signing:** RS256-signed JWTs generated on-demand for instant, one-click pass saving via `/p/:id`.
-- **Per-Tenant Credentials:** Isolated Google Cloud service accounts per tenant (`WalletService.forTenant()`) with seamless fallback to environment defaults.
-- **Real-Time REST Updates:** Asynchronous pass updates (`GenericObject` patching) upon balance adjustments, point changes, and tier upgrades.
-- **Discoverable Save Callbacks:** Automatic webhook callback registration verified via JWS (ECv2SigningOnly ECDSA-P256) signature verification.
-- **Promotional Push Notifications:** Direct-to-lockscreen message broadcasting through Google Wallet API.
-- **Dynamic Pass Fields:** Customizable field rows (labels, values, subheaders, barcode alt text) dynamically bound to the pass design.
+- **Signed Save Links:** RS256-signed JWTs minted on demand. The public `/p/:id` link mints a fresh save link on every visit, so links are never cached.
+- **Per-Tenant Credentials:** Each tenant can bring its own issuer and service account (`WalletService.forTenant()`), stored AES-256-GCM encrypted, with fallback to platform env credentials.
+- **Real-Time Pass Updates:** Balance, points and tier changes patch the Wallet object right after each transaction.
+- **Verified Callbacks:** Save/delete callbacks are verified with Google's ECv2SigningOnly (ECDSA-P256) signatures.
+- **Wallet Messages:** Promotional messages pushed straight to the pass.
+- **Dynamic Pass Fields:** Configurable field rows (labels, values, subheaders, barcode text) bound to each program's template.
 
-### Program-Scoped Architecture & Two-Level Nav
-- **Account-Level Destinations:** Global program switcher & catalog (`/dashboard`), developer platform (`/dashboard/developers`), and account settings (`/dashboard/settings`).
-- **Program-Scoped Workspaces:** Dedicated secondary sidebar navigation containing 9 functional zones:
-  - **Overview (`/overview`):** Program-level revenue, order volume, active member count, and points distribution charts.
-  - **Members (`/members`):** Program CRM, member search, manual balance adjustments, test-account flags, and DPDP actions.
-  - **Activity (`/activity`):** Real-time stream of program transactions, points earned/redeemed, and pass events.
-  - **Campaigns (`/campaigns`):** Push campaign broadcasts with audience segmentation (tier, balance, inactivity, test accounts), dry-run previews, chunked dispatch, and delivery tracking.
-  - **Design (`/design`):** Visual pass template designer with color pickers, hero banner upload, logo placement, custom field rows, and an **on-device live pass preview modal**.
-  - **Tiers (`/tiers`):** Tier progression editor with minimum points thresholds, perk descriptions, and automatic upgrade triggers.
-  - **Locations (`/locations`):** Program-specific store locations with interactive Google Maps integration.
-  - **Messages (`/messages`):** Brand-customizable WhatsApp templates with dynamic `{{variables}}` for OTP, pass links, redemption receipts, and tier upgrades.
-  - **Settings (`/settings`):** Program metadata, publish status, loyalty economics (earn rate, redeem rate, redeem cap %), and safe program deletion with confirmation modal.
-  - **Enrollment Link Widget:** Persistent in-sidebar QR code and copyable enrollment link (`/enroll/[slug]/[programSlug]`).
+### Program-Scoped Dashboard
+- **Account level:** program gallery (`/dashboard`), create from preset (`/dashboard/programs/new`), all members (`/dashboard/members`), developer platform (`/dashboard/developers`), tenant settings (`/dashboard/settings`).
+- **Program workspace** (`/dashboard/programs/[id]/…`):
+  - **Overview** — revenue, orders, points awarded and redeemed over time.
+  - **Members** — program CRM, member detail, balance adjustments, test-account flag, DPDP actions.
+  - **Activity** — live stream of transactions and pass events.
+  - **Campaigns** — WhatsApp campaigns with audience filters (tier, inactivity, test accounts), dry-run preview, chunked send and delivery tracking.
+  - **Design** — pass template designer with colors, logo, hero image, field rows and an on-device preview.
+  - **Tiers** — tier thresholds, perks and earn/redeem economics (earn rate, redeem rate, redemption cap).
+  - **Locations** — store locations on Google Maps, synced to the Wallet class.
+  - **Messages** — per-program WhatsApp templates with `{{variables}}`.
+  - **Settings** — name, slug, welcome message, and program deletion.
+  - **Enrollment link** — QR code and copyable link to `/enroll/[slug]/[programSlug]` in the program nav.
+- `/dashboard/programs/[id]/events` lists pass lifecycle events (reachable by URL).
 
-### 12 Ready-to-Use Program Presets
-Launch loyalty and membership programs in seconds with rich, contextual imagery and tailored schemas:
-- **Coffee Loyalty:** Points per currency spent, 3 tiers, 50% redemption cap.
-- **Gym Membership:** Check-in tracking, membership tiers, trainer notes.
-- **Event Ticket:** Tier-less pass with seat/row, gate, and event date/time.
-- **Travel Ticket:** Tier-less boarding pass with transport number, seat, and gate.
-- **Modern Membership:** Community and club membership with member ID and expiry.
-- **Tiered Membership:** Luxury multi-tier membership with exclusive VIP perks.
-- **Loyalty Offer:** Limited-time reward and promotional pass.
-- **Digital Business Card:** Professional contact card with titles and social links.
-- **Gift Card:** Stored-value card with real-time balance tracking.
-- **Single-Use Coupon:** Discount coupon with scannable barcode and expiration.
-- **Stamp Card:** Punch card for repeat visits and milestone rewards.
-- **Access Pass:** Security badge with building/zone permissions and validity windows.
+### 13 Program Presets
+Presets are filtered by the tenant's **business category** (Retail, Food & Beverage, Salon/Spa/Fitness, Events, Travel, Education, Professional Services), enforced server-side.
 
-### Dynamic Pass Issuance (Tier-less Programs)
-- Tier-less presets (tickets, coupons, business cards, access badges) omit tier badges, point balances, and loyalty subheaders on the Google Wallet pass, maintaining a clean aesthetic without awkward empty labels.
+| Preset | Kind | Notes |
+|---|---|---|
+| Coffee Loyalty | `loyalty` | Points per spend, tiers, redemption cap |
+| Gym Membership | `loyalty` | Visit mode — each scan counts as one check-in |
+| Event Tickets | `ticket` | Seat/row/gate captured at enrollment, check-in marks the pass used, expires after the event |
+| Travel Tickets | `ticket` | Transport number, seat and gate |
+| Modern Membership | `loyalty` | Member ID and expiry |
+| Tiered Membership | `loyalty` | Multi-tier membership with perks |
+| Loyalty Offer | `loyalty` | Promotional reward pass |
+| Business Card | `loyalty` | Contact card, no points or tiers |
+| Gift Card | `giftcard` | Stored value — `load` credits money, `redeem` spends it |
+| Single-Use Coupon | `coupon` | Scannable discount coupon |
+| Stamp Card | `loyalty` | Visit mode with a reward threshold notification |
+| Access Pass | `ticket` | Zone/validity badge |
+| Student ID | `studentid` | Institution and roll number, validate-only |
 
-### Consumer Onboarding & Mobile Enrollment
-- **Mobile-First Web App:** Responsive enrollment flow at `/enroll/[slug]/[programSlug]`.
-- **Secure 4-Digit OTP:** SHA-256 hashed, timing-safe verification, 5-minute expiry, locked after 5 incorrect attempts.
-- **Consent Tracking:** Granular marketing consent tracking recorded in `ConsentLog` for DPDP/GDPR compliance.
-- **Phone Duplication Support:** Allows multiple family members to share a phone number within a tenant while strictly preventing collision with `Admin` login accounts.
+Tier-less programs (tickets, coupons, business cards, access passes, student IDs) omit tier badges, points and loyalty subheaders on the Wallet pass.
 
-### Loyalty Engine, Redemption & Staff POS Scanner
-- **Order-Linked Points Engine:** Points awarded and redeemed based on order totals, with configurable earn and redemption discount caps.
-- **Pure Tier Computation:** Transaction-level pure `computeTier()` evaluation against the active program's tier definitions.
-- **Staff Scanner (`/scan`):** Camera-based barcode/QR scanner for cashiers, member profile lookup, order amount entry, and transaction history.
-- **PSP Simulator:** Payment webhook simulator with HMAC-SHA256 signing and replay protection.
+### Consumer Enrollment
+- **Mobile-first flow** at `/enroll/[slug]/[programSlug]` (`/enroll/[slug]` resolves to the tenant's default program).
+- **4-digit OTP over WhatsApp** — SHA-256 hashed, timing-safe compare, 5-minute expiry, locked after 5 wrong attempts. No dev bypass.
+- **Per-program enrollment fields** — e.g. seat for an event ticket, roll number for a student ID — stored on the pass.
+- **Consent tracking** in `ConsentLog`; WhatsApp `STOP`/`START` handled inbound.
+- **Shared phone numbers** — family members can share a number within a tenant.
 
-### Developer Platform & Webhooks
-- **API Keys:** Secure, SHA-256 hashed API keys for external service integration.
-- **Outbound Webhooks:** Event notifications for `pass.installed`, `pass.deleted`, `points.awarded`, `points.redeemed`, `tier.changed`, and `member.enrolled` with retry history and delivery logs.
-- **Global Idempotency:** Interceptor guarantees at-most-once execution on mutating requests (`POST`/`PUT`/`PATCH`/`DELETE`) carrying an `Idempotency-Key` header.
+### Loyalty Engine & Staff Scanner
+- **Order-linked points** — award on order totals with configurable earn rate, redeem rate and redemption cap.
+- **Pure tier computation** — `computeTier()` evaluates the program's tier rows on every transaction.
+- **Staff scanner (`/scan`)** — camera QR/barcode scan, pass validation, award/redeem via `process-order`, ticket check-in and scan history.
+- **Payments** — HMAC-SHA256 PSP webhooks with 5-minute timestamp replay protection, plus a built-in simulator.
 
-### Enterprise Security & DPDP Compliance
-- **Data Protection (DPDP):** Dedicated endpoints for member data export (`GET /members/:id/export`), soft erasure with pass anonymization (`DELETE /members/:id?mode=erase`), and hard purge (`DELETE /members/:id?mode=purge`).
-- **Comprehensive Audit Trail:** `AuditLog`, `ConsentLog`, `NotificationLog`, and `WebhookDelivery` log every administrative and customer action.
-- **Authentication:** HTTP-only JWT `admin_session` cookies (1-day validity) and bearer token authentication.
-- **Tenant Isolation:** Explicit application-level `tenantId` filtering on every database query, backed by Supabase Row-Level Security policies.
+### Developer Platform
+- **API keys** — SHA-256 hashed, created and revoked from `/dashboard/developers`.
+- **Outbound webhooks** — `pass.installed`, `pass.deleted`, `points.awarded`, `points.redeemed`, `tier.changed`, `member.enrolled`, with test events and a delivery log.
+- **Idempotency** — `POST`/`PUT`/`PATCH`/`DELETE` requests carrying an `Idempotency-Key` header replay the stored response instead of running twice. The frontend API client adds the key automatically.
+
+### Security & DPDP Compliance
+- **Data export:** `GET /members/:id/export`.
+- **Erasure:** `DELETE /members/:id?mode=erase` (default) anonymises in place and keeps the audit trail; `?mode=purge` hard-deletes.
+- **Audit trail:** `AuditLog`, `ConsentLog`, `NotificationLog`, `WebhookDelivery`.
+- **Admin auth:** OTP login, JWT in an httpOnly `admin_session` cookie (1 day) or `Authorization: Bearer`.
+- **Tenant isolation:** every query filters on `tenantId`, taken from `TenantGuard` — never from the request body or query.
 
 ---
 
 ## Tech Stack
 
-### Monorepo & Tooling
-- **Build System:** [Turborepo](https://turbo.build/) task pipeline orchestration
-- **Package Manager:** npm workspaces (`apps/*`, `packages/*`)
-- **Shared Types:** `@linearcard/types` (`packages/types`)  -  types compile from `index.ts`, runtime constants from `dist/`
+### Frontend — [LinearCard-Frontend](https://github.com/dhyan2815/LinearCard-Frontend)
+- **Framework:** Next.js 16 (App Router, Turbopack), React 19, TypeScript
+- **Styling:** Tailwind CSS v4, Lucide icons, Geist font
+- **Motion & 3D:** `motion` / Framer Motion, Three.js + `@react-three/fiber` (landing hero), `canvas-confetti`
+- **Maps & Scanning:** `@vis.gl/react-google-maps`, `@yudiel/react-qr-scanner`, `qrcode.react`
+- **UX:** `recharts`, `sonner` toasts, `nextjs-toploader`
+- **API client:** `lib/api-client.ts` — `/api/*` proxy, retries, automatic `Idempotency-Key`
+- **Route protection:** `proxy.ts` redirects unauthenticated `/dashboard` and `/scan` visits to `/login`
 
-### Frontend (`apps/web`)
-- **Framework:** Next.js 16 (App Router, Turbopack, Port `3000`), React 19, TypeScript
-- **Styling:** Tailwind CSS v4, PostCSS, Lucide Icons, Geist Font
-- **Pass Visualization:** Three.js, `@react-three/fiber`, `@react-three/drei` (3D live pass preview)
-- **Maps & Scanning:** `@vis.gl/react-google-maps` (store locations), `@yudiel/react-qr-scanner` (staff scanner), `qrcode.react`
-- **Animation & UX:** Framer Motion (`motion`), `canvas-confetti`, `sonner` toasts, `nextjs-toploader`, `recharts`
-- **API Client:** Type-safe HTTP client (`lib/api-client.ts`) utilizing Next.js rewrite proxying (`/api/*` -> backend) and automatic idempotency key attachment
+### Backend — [LinearCard-Backend](https://github.com/dhyan2815/LinearCard-Backend)
+- **Framework:** NestJS 10 (Express), TypeScript
+- **Database:** Supabase Postgres (camelCase columns), migrations in `supabase/migrations/`
+- **Google Wallet:** Wallet Objects REST API via `google-auth-library`, `jsonwebtoken` (RS256)
+- **WhatsApp:** WAHA HTTP provider (60s timeout, 2 retries)
+- **Testing:** Jest unit and regression suites, Supertest e2e smoke test
 
-### Backend (`apps/api`  -  NestJS 10)
-- **Framework:** NestJS 10 (Port `3001`), Express, TypeScript
-- **Database:** Supabase (PostgreSQL) with camelCase column conventions
-- **Google Wallet:** `@googleapis/walletobjects`, `google-auth-library`, `jsonwebtoken` (RS256)
-- **WhatsApp Integration:** WAHA (WhatsApp HTTP API) provider for transaction & campaign messaging
-- **Architecture Modules:**
-  - `auth/`  -  Member OTP, admin login, self-serve signup, `TenantGuard`
-  - `programs/`  -  Program CRUD from presets, tier management, publish actions, location sync
-  - `templates/`  -  PassTemplate CRUD, Google Wallet class publishing, preview, pass resyncing
-  - `passes/`  -  Issuance (`PassIssuanceService`), order processing, validation, `/p/:id` save links, wallet callbacks
-  - `members/`  -  CRM, balance adjustments, test-account flags, DPDP data export & deletion
-  - `campaigns/`  -  Send-now campaigns: dry-run preview, batch dispatch, delivery reporting
-  - `payments/`  -  PSP webhook receiver (HMAC verification), webhook simulator
-  - `developers/`  -  API keys and outbound webhook subscriptions
-  - `notifications/` & `notification/`  -  WhatsApp client, OTP delivery, inbound STOP/START handling
-  - `wallet/`  -  Google Wallet REST client, JWT save links, JWS callback verification
-  - `tiers/`  -  Pure `computeTier()` evaluation engine
-  - `tenant/` & `settings/`  -  Tenant profiles, custom branding, domain settings
-  - `dashboard/`, `audit/`, `supabase/`  -  Business analytics, audit logging, Supabase service client
-- **Execution Model:** In-request synchronous processing (no complex background queues needed)
+| Module | Routes | Purpose |
+|---|---|---|
+| `auth/` | `/auth/*` | Member OTP, admin OTP login, self-serve signup, `me`, logout, `TenantGuard` |
+| `programs/` | `/programs/*` | Presets, program CRUD, tiers, publish, location sync, overview, members, events |
+| `templates/` | `/templates/*` | Pass templates, Wallet class publish, preview pass, resync passes |
+| `passes/` | `/passes/*`, `/p/:id` | Issuance, `process-order`, `validate-pass`, scan history, promo messages, POS + Wallet webhooks |
+| `members/` | `/members/*` | CRM, test-account flag, balance adjustment, DPDP export/erase |
+| `campaigns/` | `/campaigns/*` | Preview, send, list, detail |
+| `payments/` | `/webhooks/payment/:tenantId`, `/payments/*` | PSP webhook, webhook config, simulator |
+| `developers/` | `/developers/*` | API keys, outbound webhook endpoints |
+| `notifications/` | `/notifications/*` | Notification log, inbound WhatsApp STOP/START |
+| `tenant/`, `settings/` | `/tenant/*`, `/settings`, `/admin/*` | Tenant lookup, business details, production approval, settings |
+| `dashboard/` | `/dashboard/stats` | Tenant stats |
+| `wallet/`, `notification/`, `tiers/`, `audit/`, `supabase/` | — | Wallet client, WhatsApp/OTP, `computeTier()`, audit, Supabase client |
+
+`GET /health` is the Render health check.
 
 ---
 
 ## Project Structure
 
 ```
-linearcard/
-├── apps/
-│   ├── api/                           # NestJS Backend (Port 3001)
-│   │   ├── src/
-│   │   │   ├── audit/                 # Audit logging service
-│   │   │   ├── auth/                  # Admin auth, member OTP, TenantGuard
-│   │   │   ├── campaigns/             # Push campaign segmentation & dispatch
-│   │   │   ├── dashboard/             # Business metrics & analytics queries
-│   │   │   ├── developers/            # API keys & outbound webhooks
-│   │   │   ├── members/               # Member CRM & DPDP endpoints
-│   │   │   ├── notification/          # WhatsApp provider & templates
-│   │   │   ├── notifications/         # Notification logs & inbound opt-outs
-│   │   │   ├── passes/                # Pass issuance, order processing, /p/:id
-│   │   │   ├── payments/              # PSP webhook simulator & handler
-│   │   │   ├── programs/              # Program CRUD, presets, tiers, locations
-│   │   │   ├── settings/              # Tenant & system settings
-│   │   │   ├── supabase/              # Supabase client wrapper
-│   │   │   ├── templates/             # Pass template designer & class publishing
-│   │   │   ├── tenant/                # Tenant lookup & profile
-│   │   │   ├── tiers/                 # Pure computeTier() utility
-│   │   │   ├── wallet/                # Google Wallet REST, JWT signing, JWS callback
-│   │   │   ├── app.module.ts          # Root NestJS module
-│   │   │   ├── idempotency.interceptor.ts # Global Idempotency-Key handler
-│   │   │   └── main.ts                # Application bootstrap
-│   │   └── test/                      # E2E test suites
-│   └── web/                           # Next.js 16 Frontend (Port 3000)
-│       ├── app/
-│       │   ├── dashboard/             # Admin Dashboard
-│       │   │   ├── _components/       # DashboardSidebar, ProgramSidebar, Context
-│       │   │   ├── developers/        # Developer API keys & webhooks page
-│       │   │   ├── members/           # Global members view & [id] profile
-│       │   │   ├── programs/          # Program gallery, creation (/new), and
-│       │   │   │   └── [id]/          # Program-scoped tabs: overview, members,
-│       │   │   │                      # activity, campaigns, design, tiers,
-│       │   │   │                      # locations, messages, settings
-│       │   │   └── settings/          # Tenant account settings
-│       │   ├── enroll/[slug]/[programSlug] # Consumer onboarding & OTP flow
-│       │   ├── login/                 # Admin OTP login
-│       │   └── scan/                  # Staff POS barcode scanner
-│       ├── components/                # Reusable UI & 3D pass cards
-│       └── lib/api-client.ts          # Type-safe API client wrapper
-├── packages/
-│   └── types/                         # @linearcard/types (Monorepo data models)
-│       ├── src/                       # TypeScript interfaces
-│       └── index.ts
-├── architecture/                      # Visual system architecture diagrams
-│   ├── activity_diagram.jpg           # Core system activity flow
-│   ├── data_flow_diagram.jpg          # System data flow diagram
-│   ├── entity_relationship_diagram.jpg # Database ERD
-│   └── sequence_diagram.jpg           # End-to-end issuance & order sequence
-├── supabase/
-│   └── migrations/                    # SQL schema migrations
-├── docs/                              # Architecture specs, patterns, and PRDs
-│   ├── EDGE_CASES.md                  # Edge cases and handling
-│   ├── MULTI_TENANT.md                # Multi-tenancy isolation rules
-│   ├── PATTERNS.md                    # Core engineering patterns
-│   ├── TROUBLESHOOTING.md             # Common bugs and debugging steps
-│   ├── WEBHOOKS.md                    # Inbound and outbound webhook reference
-│   └── product/                       # PRD and competitor analysis
-├── .claude/rules/                     # Workspace-specific developer guidelines
-├── turbo.json                         # Turborepo task pipeline configuration
-├── CLAUDE.md                          # Claude Code developer guide
-├── GEMINI.md                          # Persistent project memory & changelog
-├── AGENTS.md                          # Next.js 16 breaking change guidelines
-└── README.md
+LinearCard-Frontend/
+├── app/
+│   ├── page.tsx                      # Landing page
+│   ├── login/                        # Admin OTP login + signup
+│   ├── dashboard/
+│   │   ├── _components/              # DashboardContext, DashboardSidebar, ProgramNav, shared views
+│   │   ├── programs/                 # Gallery, /new, and [id]/ program tabs:
+│   │   │   └── [id]/                 #   overview, members, activity, campaigns, design,
+│   │   │                             #   tiers, locations, messages, settings, events
+│   │   ├── members/                  # Account-wide members + [id] detail
+│   │   ├── developers/               # API keys & webhooks
+│   │   └── settings/                 # Tenant settings
+│   ├── enroll/[slug]/[programSlug]/  # Consumer enrollment + OTP
+│   └── scan/                         # Staff scanner
+├── components/                       # Pass previews, wallet modal, scan history, ui/ primitives
+├── lib/
+│   ├── api-client.ts                 # Fetch wrapper
+│   └── types.ts                      # Shared domain types
+├── diagrams/                         # Architecture diagrams
+├── proxy.ts                          # Route protection
+└── next.config.mjs                   # /api/* → backend rewrite
+
+LinearCard-Backend/
+├── src/
+│   ├── auth/ programs/ templates/ passes/ members/ campaigns/ payments/
+│   ├── developers/ notifications/ notification/ wallet/ tiers/
+│   ├── tenant/ settings/ dashboard/ audit/ supabase/
+│   ├── *.spec.ts                     # Regression suites
+│   ├── types.ts                      # Shared domain types (kept in sync with frontend lib/types.ts)
+│   ├── env.ts                        # Env loading, boot checks, secret encryption
+│   ├── idempotency.interceptor.ts    # Global Idempotency-Key handler
+│   └── main.ts                       # Bootstrap, CORS, port 3001
+├── supabase/migrations/              # SQL migrations
+├── scripts/                          # Wallet repair, backfills, WAHA CLI, demo reset
+├── test/                             # Jest e2e
+├── tests/                            # Ad-hoc API check scripts
+└── render.yaml                       # Render services (master → prod, DEV → dev)
 ```
 
 ---
 
-## Visual System Architecture
+## Diagrams
 
-The LinearCard architecture spans a Next.js App Router frontend, a NestJS API backend, Supabase PostgreSQL with application-level tenant isolation, and integrations with Google Wallet, WhatsApp, and external POS/PSP systems.
+### Business Flow
+![Business Flow Diagram](https://github.com/dhyan2815/LinearCard-Frontend/blob/master/diagrams/Business%20Flow%20Diagram.jpg?raw=true)
 
-### System Data Flow Diagram
-The complete lifecycle from consumer onboarding and QR scanning to transaction processing, tier evaluation, Google Wallet updates, and WhatsApp delivery:
+### Process Flow
+![Process Flow Diagram](https://github.com/dhyan2815/LinearCard-Frontend/blob/master/diagrams/Process%20Flow%20Diagram.jpg?raw=true)
 
-![LinearCard Architecture Data Flow](architecture/data_flow_diagram.jpg)
+### Entity-Relationship Diagram
+![ER Diagram](https://github.com/dhyan2815/LinearCard-Frontend/blob/master/diagrams/ER%20Diagram.jpg?raw=true)
 
-### End-to-End Sequence Diagram
-Detailed sequence of pass issuance, POS order verification, tier computation, Google Wallet class/object synchronization, and customer messaging:
-
-![LinearCard Sequence Diagram](architecture/sequence_diagram.jpg)
-
-### Core Activity Diagram
-Step-by-step decision flow for member enrollment, order processing, tier progression, push campaigns, and data protection:
-
-![LinearCard Activity Diagram](architecture/activity_diagram.jpg)
-
-### Entity-Relationship Diagram (ERD)
-Database schema showing relationships between Tenants, Programs, PassTemplates, Tiers, Passes, Members, Campaigns, Store Locations, and Audit Logs:
-
-![LinearCard Entity-Relationship Diagram](architecture/entity_relationship_diagram.jpg)
+### Use Case (Restaurant)
+![Use Case Diagram](https://github.com/dhyan2815/LinearCard-Frontend/blob/master/diagrams/Use%20Case%20(Restuarant)%20Diagram.jpg?raw=true)
 
 ---
 
 ## Getting Started
 
 ### Prerequisites
-- **Node.js:** v18.0.0 or higher
-- **npm:** v10.0.0 or higher (workspaces enabled)
-- **Supabase:** Active Supabase project (URL and keys)
-- **Google Cloud:** Service account with Google Wallet API access
-- **ngrok:** Optional for local Google Wallet callback testing
+- **Node.js** 20.9 or higher, npm
+- **Supabase** project (URL + service-role key)
+- **Google Cloud** service account with Google Wallet API access, and a Wallet issuer ID
+- **WAHA** server (optional — without it WhatsApp sends are skipped)
+- **ngrok** (optional — only to publish Wallet classes locally)
 
-### Installation
+### 1. Backend
 
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/dhyan2815/linearcard.git
-   cd linearcard
-   ```
-
-2. **Install dependencies:**
-   ```bash
-   npm install
-   ```
-
-3. **Configure Environment Variables:**
-   - **Backend (`apps/api/.env` or root `.env`):**
-     ```env
-     # Supabase
-     NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-     SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
-     NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-
-     # Auth & Cryptography
-     JWT_SECRET=your-random-jwt-secret
-     WALLET_CREDENTIALS_KEY=your-aes-key-for-tenant-wallet-creds
-
-     # Google Wallet Defaults
-     ISSUER_ID=your-google-wallet-issuer-id
-     GOOGLE_CLIENT_EMAIL=wallet-service-account@project.iam.gserviceaccount.com
-     GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
-
-     # Local Development Public Tunnel (Required for local Wallet publish)
-     PUBLIC_CALLBACK_URL=https://your-ngrok-domain.ngrok-free.app
-     ```
-   - **Frontend (`apps/web/.env`):**
-     ```env
-     API_ORIGIN=http://localhost:3001
-     ```
-   *(For preview deployments, Vercel system environment variables `VERCEL_ENV`, `VERCEL_URL`, and `VERCEL_BRANCH_URL` are automatically resolved for dynamic callback and API routing.)*
-
-### Running the Development Environment
-
-Run the backend and frontend in **two separate terminal windows** to keep log streams distinct and clear:
-
-**Terminal 1 (Backend API):**
 ```bash
-npm run dev:api
+git clone https://github.com/dhyan2815/LinearCard-Backend.git
+cd LinearCard-Backend
+npm install
+cp .env.example .env
 ```
-*Backend runs at `http://localhost:3001`.*
 
-**Terminal 2 (Frontend Web App):**
+Fill in `.env`:
+
+```env
+# Required at boot
+JWT_SECRET=                 # openssl rand -base64 32
+WALLET_CREDENTIALS_KEY=     # openssl rand -hex 32
+
+# Supabase
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+
+# Google Wallet platform defaults
+ISSUER_ID=your-google-wallet-issuer-id
+GOOGLE_CLIENT_EMAIL=wallet-service-account@project.iam.gserviceaccount.com
+GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+
+# WhatsApp (optional)
+WAHA_BASE_URL=http://localhost:3002
+WAHA_API_KEY=
+WAHA_SESSION=default
+
+# URLs
+FRONTEND_URL=http://localhost:3000
+NEXT_PUBLIC_BASE_URL=http://localhost:3000
+
+# Only while publishing a Wallet class locally
+PUBLIC_CALLBACK_URL=https://your-ngrok-domain.ngrok-free.app
+```
+
+Apply the database migrations and start the API:
+
 ```bash
-npm run dev:web
+npx supabase link --project-ref <project-ref>
+npx supabase db push
+npm run dev                 # http://localhost:3001
 ```
-*Frontend runs at `http://localhost:3000`.*
+
+### 2. Frontend
+
+```bash
+git clone https://github.com/dhyan2815/LinearCard-Frontend.git
+cd LinearCard-Frontend
+npm install
+cp .env.example .env
+```
+
+```env
+API_ORIGIN=http://localhost:3001          # backend the /api/* proxy forwards to
+NEXT_PUBLIC_API_URL=http://localhost:3001 # backend URL for server-side rendering
+NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=          # optional, Locations tab
+```
+
+```bash
+npm run dev                 # http://localhost:3000
+```
+
+Run the backend and frontend in two separate terminals.
 
 ---
 
-## Available NPM Scripts
+## NPM Scripts
 
-- `npm run dev:api`  -  Builds `@linearcard/types`, then starts NestJS backend with watch mode on `localhost:3001`.
-- `npm run dev:web`  -  Builds `@linearcard/types`, then starts Next.js App Router on `localhost:3000`.
-- `npm run build`  -  Compiles all workspaces via Turborepo caching.
-- `npm run lint`  -  Runs ESLint auto-fix across all workspaces.
-- `npm run demo:reset`  -  Wipes demo tenant records specified in `DEMO_TENANT_IDS`.
-- `npm run kill-ports`  -  Force-terminates orphaned processes on ports 3000 and 3001.
+### Frontend
+| Command | Description |
+|---|---|
+| `npm run dev` | Next.js dev server on port 3000 |
+| `npm run build` | Production build |
+| `npm run start` | Serve the production build |
+
+### Backend
+| Command | Description |
+|---|---|
+| `npm run dev` | NestJS with watch mode on port 3001 |
+| `npm run build` | Compile to `dist/` |
+| `npm run start:prod` | Run the compiled build |
+| `npm run lint` | ESLint with `--fix` |
+| `npm run format` | Prettier |
+| `npm run test` | Jest unit + regression suites |
+| `npm run test:cov` | Coverage report |
+| `npm run test:e2e` | E2E smoke test |
+| `npm run waha` | WAHA CLI helper |
+| `npm run demo:reset` | Wipe demo tenants listed in `DEMO_TENANT_IDS` |
 
 ---
 
-## Key Architectural Guidelines & Gotchas
+## Deployment
 
-1. **Application-Level Tenant Isolation:** The backend connects to Supabase using the service-role key which bypasses RLS. Every query must explicitly include `.eq('tenantId', tenantId)`. Never trust a `tenantId` passed in a request body or query parameter.
-2. **Programs Own Resources:** Each program owns its templates, tier rows, store locations, custom WhatsApp templates, and enrollment slug.
-3. **Pass Issuance Lifecycle:** Passes must always be created via `PassIssuanceService.issueForMember()`. Non-loyalty programs dynamically omit points and tier attributes.
-4. **Google Wallet Save Links:** Save links expire in 3 hours. `GET /p/:id` dynamically mints a fresh token upon access - never cache save links.
-5. **Resilient Side Effects:** Wallet pushes, WhatsApp dispatches, and outbound webhooks fire after the database write. Failures are logged in audit tables and do not rollback transactions.
-6. **No Job Queue:** Campaign dispatches and pass resynchronizations run synchronously in-request for maximum serverless compatibility.
+| App | Host | Production | Development |
+|---|---|---|---|
+| Frontend | Vercel | `master` | `DEV` and other branches as previews |
+| Backend | Render (`render.yaml`) | `linearcard-api` from `master` | `linearcard-api-dev` from `DEV` |
+
+- Point the frontend's `API_ORIGIN` / `NEXT_PUBLIC_API_URL` at the matching backend, then redeploy — the proxy target is baked in at build time.
+- `WALLET_ENV_PREFIX` keeps Wallet classes apart per environment (`none` on prod, `dev` on dev). Both environments share one Supabase project and one Wallet issuer.
+- Set the backend's `FRONTEND_URL` to the frontend origin for CORS. `*.vercel.app` and localhost are always allowed.
 
 ---
 
-## Documentation & References
+## Key Guidelines & Gotchas
 
-- **Project Guides:**
-  - [CLAUDE.md](CLAUDE.md)  -  Claude Code developer reference and workflow rules
-  - [GEMINI.md](GEMINI.md)  -  Persistent AI project memory and changelog
-  - [AGENTS.md](AGENTS.md)  -  Next.js 16 breaking change guide and conventions
-- **Deep-Dive Engineering Docs:**
-  - [Common Patterns (`docs/PATTERNS.md`)](docs/PATTERNS.md)
-  - [Multi-Tenant Isolation (`docs/MULTI_TENANT.md`)](docs/MULTI_TENANT.md)
-  - [Edge Cases & Gotchas (`docs/EDGE_CASES.md`)](docs/EDGE_CASES.md)
-  - [Webhooks & Callbacks (`docs/WEBHOOKS.md`)](docs/WEBHOOKS.md)
-  - [Troubleshooting Guide (`docs/TROUBLESHOOTING.md`)](docs/TROUBLESHOOTING.md)
-- **Product & Specifications:**
-  - [LinearCard PRD (`docs/product/LinearCard_PRD_v1.md`)](docs/product/LinearCard_PRD_v1.md)
-  - [Competitor Research (`docs/product/Competitor_Research_Report.md`)](docs/product/Competitor_Research_Report.md)
+1. **Tenant isolation:** the backend uses Supabase's service-role key, which bypasses RLS. Every query must include `.eq('tenantId', tenantId)`, with `tenantId` taken from `TenantGuard`.
+2. **Programs own their resources:** template, tiers, locations, WhatsApp templates and enrollment slug all belong to one program.
+3. **One issuance path:** passes are created only through `PassIssuanceService.issueForMember()`.
+4. **Check `Program.kind`, not loyalty:** `loyalty | ticket | giftcard | coupon | studentid` behave differently in the transaction pipeline.
+5. **Never cache save links:** always share `/p/:id`, which mints a fresh one.
+6. **Side effects are best-effort:** Wallet, WhatsApp and webhook failures are logged and never roll back the database. A pass on a phone can update a moment after the balance is saved.
+7. **Shared types:** `lib/types.ts` (frontend) and `src/types.ts` (backend) are copies — change both together.
+8. **`NEXT_PUBLIC_*` is baked at build time:** rebuild the frontend after changing it.
 
 ---
 
