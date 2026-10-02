@@ -1,99 +1,153 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# LinearCard Backend
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+NestJS API for LinearCard — a multi-tenant digital loyalty, ticket, gift card and membership platform built on Google Wallet passes, with WhatsApp notifications and a Supabase (Postgres) data store.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://coveralls.io/github/nestjs/nest?branch=master" target="_blank"><img src="https://coveralls.io/repos/github/nestjs/nest/badge.svg?branch=master#9" alt="Coverage" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+Frontend lives in [LinearCard-Frontend](https://github.com/dhyan2815/LinearCard-Frontend).
 
-## Description
+## Tech Stack
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+- **Runtime:** Node.js 20+, TypeScript
+- **Framework:** NestJS 10 (Express)
+- **Database:** Supabase (Postgres), service-role client
+- **Wallet:** Google Wallet REST API + JWT save links (`google-auth-library`, `googleapis`)
+- **Messaging:** WhatsApp via [WAHA](https://waha.devlike.pro/)
+- **Testing:** Jest, Supertest
 
-## Project setup
+## Features
 
-```bash
-$ npm install
-```
+- **Programs** — create loyalty, ticket, gift card, coupon and student ID programs from presets, gated by the tenant's business category
+- **Pass templates** — design, publish and resync Google Wallet classes and objects
+- **Pass issuance** — single issuance path for enrollment, payments and generated passes, with tier assignment
+- **Transactions** — award, redeem, load and validate via `process-order`, with automatic tier recompute and Wallet push
+- **Members CRM** — member list and detail, balance adjustment, DPDP export and erase
+- **Campaigns** — preview and send WhatsApp campaigns, gated by consent and opt-out
+- **Payments** — HMAC-verified PSP webhooks that enroll members and issue passes
+- **Developer surface** — hashed API keys and signed outbound webhooks (`pass.installed`, `points.awarded`, `tier.changed`, …)
+- **Auth** — 4-digit OTP for members and admins, admin session JWT in an httpOnly cookie
+- **Audit** — `AuditLog`, `ConsentLog`, `NotificationLog` and `WebhookDelivery` trails
 
-## Compile and run the project
+## Getting Started
 
-```bash
-# development
-$ npm run start
+### Prerequisites
 
-# watch mode
-$ npm run start:dev
+- Node.js 20+
+- A Supabase project
+- A Google Wallet issuer account and service account
+- (Optional) A WAHA server for WhatsApp
+- (Optional) [ngrok](https://ngrok.com/) for publishing Wallet classes locally
 
-# production mode
-$ npm run start:prod
-```
-
-## Run tests
+### Install
 
 ```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+git clone https://github.com/dhyan2815/LinearCard-Backend.git
+cd LinearCard-Backend
+npm install
+cp .env.example .env
 ```
+
+### Configure
+
+Fill in `.env`. Only `JWT_SECRET` and `WALLET_CREDENTIALS_KEY` are boot-fatal; everything else fails lazily on first use.
+
+| Variable | Required | Purpose |
+|---|---|---|
+| `JWT_SECRET` | Yes | Signs admin session JWTs. `openssl rand -base64 32` |
+| `WALLET_CREDENTIALS_KEY` | Yes | Encrypts per-tenant Wallet private keys at rest. `openssl rand -hex 32` |
+| `NEXT_PUBLIC_SUPABASE_URL` | Yes | Supabase project URL (`SUPABASE_URL` also accepted) |
+| `SUPABASE_SERVICE_ROLE_KEY` | Yes | Supabase service-role key |
+| `ISSUER_ID` | Yes* | Google Wallet issuer id |
+| `GOOGLE_CLIENT_EMAIL` | Yes* | Service account email |
+| `GOOGLE_PRIVATE_KEY` | Yes* | Service account private key (single line with `\n` escapes is fine) |
+| `WAHA_BASE_URL`, `WAHA_API_KEY`, `WAHA_SESSION` | No | WhatsApp sends. Unset → sends are skipped with a warning |
+| `FRONTEND_URL` | No | Extra allowed CORS origin |
+| `NEXT_PUBLIC_BASE_URL` | No | Public frontend URL used in enrollment and pass links |
+| `WALLET_ENV_PREFIX` | No | Wallet class-id namespace. Defaults to `dev` locally; `none` disables it |
+| `PUBLIC_CALLBACK_URL` | No | ngrok HTTPS URL for Wallet callbacks — local Wallet publishing only |
+| `PORT` | No | API port, default `3001` |
+
+\* Required unless every tenant has its own Wallet credentials stored on the `Tenant` row.
+
+### Database
+
+Migrations live in `supabase/migrations/`. Apply them with the Supabase CLI:
+
+```bash
+npx supabase link --project-ref <project-ref>
+npx supabase db push
+```
+
+### Run
+
+```bash
+npm run dev          # watch mode on http://localhost:3001
+npm run build        # compile to dist/
+npm run start:prod   # run the compiled build
+```
+
+Health check: `GET /health`.
+
+## Scripts
+
+| Command | Description |
+|---|---|
+| `npm run dev` | Start with file watching |
+| `npm run start:debug` | Start with debugger and watching |
+| `npm run build` | Compile TypeScript to `dist/` |
+| `npm run start:prod` | Run the compiled build |
+| `npm run lint` | ESLint with `--fix` |
+| `npm run format` | Prettier |
+| `npm run test` | Unit and regression suites (`src/**/*.spec.ts`) |
+| `npm run test:watch` | Jest in watch mode |
+| `npm run test:cov` | Coverage report in `coverage/` |
+| `npm run test:e2e` | E2E smoke test (`test/`) |
+| `npm run waha` | WAHA CLI helper |
+| `npm run demo:reset` | Wipe demo tenants listed in `DEMO_TENANT_IDS` |
+
+Run a single test file:
+
+```bash
+npm run test -- wallet.service.spec.ts
+```
+
+## Project Structure
+
+```
+src/
+├── auth/           # Member + admin OTP, signup, TenantGuard
+├── programs/       # Program CRUD, presets, tiers, analytics
+├── templates/      # Pass templates, Wallet class publish
+├── passes/         # Issuance, process-order, validate, /p/:id public link
+├── members/        # CRM, balance adjustment, DPDP export/erase
+├── campaigns/      # WhatsApp campaigns
+├── payments/       # PSP webhooks
+├── developers/     # API keys, outbound webhooks
+├── notification/   # WhatsApp provider, OTP, notify service
+├── notifications/  # Notification log, inbound STOP/START
+├── wallet/         # Google Wallet client, JWS callback verification
+├── tiers/          # computeTier()
+├── tenant/ settings/ dashboard/ audit/ supabase/
+├── env.ts          # Env loading and boot checks
+└── main.ts         # Entry point
+supabase/migrations/  # SQL migrations
+scripts/              # Maintenance and repair scripts
+tests/                # Ad-hoc API check scripts (.mjs)
+```
+
+## Multi-Tenancy
+
+All queries use the Supabase service-role client, which bypasses RLS. Every query **must** filter by `tenantId` explicitly. Guarded routes get `req.tenantId` from `TenantGuard`; never trust a `tenantId` from the request body or query.
 
 ## Deployment
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+Deployed on [Render](https://render.com/) via `render.yaml`:
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+| Service | Branch | `WALLET_ENV_PREFIX` |
+|---|---|---|
+| `linearcard-api` | `master` | `none` |
+| `linearcard-api-dev` | `DEV` | `dev` |
 
-```bash
-$ npm install -g mau
-$ mau deploy
-```
-
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+Set secret env vars in the Render dashboard. Build: `npm install && npm run build`. Start: `npm run start:prod`.
 
 ## License
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+Private — all rights reserved.
