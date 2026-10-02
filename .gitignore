@@ -18,6 +18,9 @@
 
 # claude / ai config (untracked)
 .claude/
+CLAUDE.md
 
 # misc
 .DS_Store
+GEMINI.md
+AGENTS.md

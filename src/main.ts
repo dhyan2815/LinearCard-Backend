@@ -10,17 +10,22 @@ async function bootstrap() {
   app.use(cookieParser());
   app.enableCors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (like mobile apps or curl) or matching localhost/frontend
-      if (
-        !origin ||
-        origin.includes('localhost') ||
-        origin.includes('127.0.0.1') ||
-        (process.env.FRONTEND_URL && origin === process.env.FRONTEND_URL)
-      ) {
-        callback(null, true);
-      } else {
-        callback(null, true); // Dev-friendly fallback
+      // No origin = mobile apps, curl, server-side calls. Vercel previews get
+      // a fresh *.vercel.app host per branch/PR, so match the suffix.
+      const frontendUrl = process.env.FRONTEND_URL?.replace(/\/+$/, '');
+      let hostname = '';
+      try {
+        hostname = origin ? new URL(origin).hostname : '';
+      } catch {
+        // malformed Origin header — falls through to reject
       }
+      const isAllowed =
+        !origin ||
+        hostname === 'localhost' ||
+        hostname === '127.0.0.1' ||
+        (!!frontendUrl && origin === frontendUrl) ||
+        hostname.endsWith('.vercel.app');
+      callback(null, isAllowed);
     },
     credentials: true,
   });
