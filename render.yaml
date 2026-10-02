@@ -6,7 +6,7 @@ services:
     branch: master
     buildCommand: npm install && npm run build
     startCommand: npm run start:prod
-    healthCheckPath: /
+    healthCheckPath: /health
     envVars: &envVars
       - key: NODE_VERSION
         value: "20"
@@ -14,11 +14,9 @@ services:
         sync: false
       - key: WALLET_CREDENTIALS_KEY
         sync: false
-      - key: SUPABASE_URL
+      - key: NEXT_PUBLIC_SUPABASE_URL
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
-        sync: false
-      - key: SUPABASE_ANON_KEY
         sync: false
       - key: ISSUER_ID
         sync: false
@@ -38,6 +36,8 @@ services:
         sync: false
       - key: NEXT_PUBLIC_API_URL
         sync: false
+      - key: WALLET_WEBHOOK_SECRET
+        sync: false
       - key: WALLET_ENV_PREFIX
         sync: false # "none" on prod, "dev" on staging
 
@@ -48,5 +48,5 @@ services:
     branch: DEV
     buildCommand: npm install && npm run build
     startCommand: npm run start:prod
-    healthCheckPath: /
+    healthCheckPath: /health
     envVars: *envVars
