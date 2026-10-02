@@ -9,7 +9,7 @@ services:
     healthCheckPath: /health
     envVars:
       - key: NODE_VERSION
-        value: "20"
+        value: "22"
       - key: WALLET_ENV_PREFIX
         value: none
       - key: NEXT_PUBLIC_SUPABASE_URL
@@ -51,7 +51,7 @@ services:
     healthCheckPath: /health
     envVars:
       - key: NODE_VERSION
-        value: "20"
+        value: "22"
       - key: WALLET_ENV_PREFIX
         value: dev
       - key: NEXT_PUBLIC_SUPABASE_URL
