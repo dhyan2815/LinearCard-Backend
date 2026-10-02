@@ -196,17 +196,44 @@ LinearCard-Backend/
 
 ## Diagrams
 
+Regenerated 2 October 2026 from the current code: the Supabase table set, the
+`/passes/process-order` pipeline, and the live route map. Sources are authored
+as Excalidraw scenes and exported to PNG.
+
 ### Business Flow
-![Business Flow Diagram](https://github.com/dhyan2815/LinearCard-Frontend/blob/master/diagrams/Business%20Flow%20Diagram.jpg?raw=true)
+
+Tenant onboarding through to a wallet pass living in a member's phone, as four
+swimlanes (Business Admin, LinearCard API, Google Wallet, Member). Ends with the
+post-save fan-out every transaction triggers.
+
+![Business Flow Diagram](diagrams/Business%20Flow%20Diagram.png)
 
 ### Process Flow
-![Process Flow Diagram](https://github.com/dhyan2815/LinearCard-Frontend/blob/master/diagrams/Process%20Flow%20Diagram.jpg?raw=true)
+
+A counter scan to a settled pass: `POST /passes/process-order` →
+`processOrderTransaction()` → `syncPassAfterTransaction()`, including the
+`award` / `redeem` / `load` branch, the per-`kind` guards, and the single
+fan-out point (tier recompute, Wallet push, WhatsApp receipt, webhook dispatch,
+audit write). Wallet, WhatsApp and webhook failures never roll back the DB write.
+
+![Process Flow Diagram](diagrams/Process%20Flow%20Diagram.png)
 
 ### Entity-Relationship Diagram
-![ER Diagram](https://github.com/dhyan2815/LinearCard-Frontend/blob/master/diagrams/ER%20Diagram.jpg?raw=true)
+
+All 17 Supabase tables with their primary and foreign keys. Every table is
+tenant-scoped; queries use the service-role client, so each one filters on
+`tenantId` explicitly. Deletes cascade from `Tenant`, while `Program` / `Pass`
+FKs use `ON DELETE SET NULL` where history has to survive.
+
+![ER Diagram](diagrams/ER%20Diagram.png)
 
 ### Use Case (Restaurant)
-![Use Case Diagram](https://github.com/dhyan2815/LinearCard-Frontend/blob/master/diagrams/Use%20Case%20(Restuarant)%20Diagram.jpg?raw=true)
+
+A restaurant running a points loyalty program: Owner, Cashier and Diner against
+the system boundary, with Google Wallet, WhatsApp/WAHA and the POS/PSP as
+external actors.
+
+![Use Case Diagram](diagrams/Use%20Case%20(Restuarant)%20Diagram.png)
 
 ---
 
